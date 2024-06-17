@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multiplayer Game</title>
+  <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+</head>
+<body>
+  <div id="game">
+    <h2>Round: <span id="round"></span></h2>
+    <div id="players"></div>
+    <button onclick="sendNextRound()">Next Round</button>
+  </div>
+
+  <script>
+    const socket = io('http://localhost:3000');
+
+    socket.on('gameState', (gameState) => {
+      updateUI(gameState);
+    });
+
+    function sendAction(action) {
+      socket.emit('action', action);
+    }
+
+    function sendNextRound() {
+      sendAction({ type: 'next_round' });
+    }
+
+    function updateUI(gameState) {
+      document.getElementById('round').innerText = gameState.round;
+      const playersDiv = document.getElementById('players');
+      playersDiv.innerHTML = '';
+      for (const playerId in gameState.players) {
+        const player = gameState.players[playerId];
+        const playerDiv = document.createElement('div');
+        playerDiv.innerText = `Player ${player.id}: ${player.name}`;
+        playersDiv.appendChild(playerDiv);
+      }
+    }
+  </script>
+</body>
+</html>

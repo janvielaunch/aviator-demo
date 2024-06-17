@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aviator</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css">
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <div class="container mx-4 my-4 px-4 py-4">
+        <div class="row mx-2 my-2 px-2 py-2">
+            <div class="col-4">
+                <div>
+                    <h6>User ID: <span id="userId"></span></h6>
+                    <h6>Balance: <span id="user_balance"></span></h6>
+                </div>
+
+                <div class="d-flex">
+                    <h6> Bet : </h6>
+                    <h6 class="bet_text"> - </h6>
+                </div>
+
+                <p>
+                <h6>Game Timer : </h6>
+                <div class="game_timer"></div>
+                </p>
+
+                <p>
+                <h6>Cashout multiplyer : </h6>
+                <div class="timer"></div>
+                </p>
+            </div>
+        </div>
+        <div class="row mx-2 my-2 px-2 py-2">
+            <div class="col-4">
+                <button type="button" id="play" onClick="roundStart()">Play</button>
+                <button type="button" id="end" onClick="roundEnd()" disabled="disabled">End</button>
+            </div>
+
+        </div>
+        <div class="row mx-2 my-2 px-2 py-2 ">
+            <div class="col-4">
+                <input type="text" placeholder="Enter bet amount" name="betAmount" id="betAmount" required/>
+            </div>
+            <div class="col-4 ">
+                <button type="button" id="bet" onClick="bet()">Bet</button>
+                <button type="button" id="cancel" onClick="cancel()" disabled="disabled">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <script>
+
+        const socket = io("http://localhost:3000")
+
+        const gameId = '6666f1bd704df0066adfc878';
+        let currency = "INR";
+
+
+        // Generate random user ID and balance
+        const user = Math.floor(Math.random() * (100000 - 10000 + 1)) + 10000;
+        let userBalance = 500;
+
+        // Display user ID and balance
+        document.getElementById('userId').textContent = user;
+        document.getElementById('user_balance').textContent = userBalance;
+
+        // Emit userId to server on connection
+        socket.on('connect', () => {
+            console.log('connect',user)
+            socket.emit('user_connected', { user, userBalance });
+        });
+
+        socket.on('first',()=>{
+            console.log('first called');
+            const betAmount = $("#betAmount").val()
+            const gameData = {
+                gameId: gameId,
+                betAmount: betAmount,
+                currency: currency,
+                user: user,
+                // balance: userBalance
+            }
+            socket.emit("round_start", gameData)
+        });
+
+        // Initial state handling
+        socket.on("initial_state", (data) => {
+            console.log("Initial state received", data);
+            // Update UI with initial state data
+            // Example: Update user balance
+            $(".user_balance").text(data.balance);
+        });
+
+        // socket.on("round_started", (data) => {
+        //     console.log("Round started", data);
+        //     // Update UI to reflect round start
+        //     // Example: Disable play button, enable end button
+        //     $("#play").attr('disabled', true);
+        //     $("#end").removeAttr('disabled');
+        //     $("#bet").removeAttr('disabled');
+        // });
+
+        // socket.on("round_ended", () => {
+        //     console.log("Round ended");
+        //     // Update UI to reflect round end
+        //     // Example: Enable play button, disable end button, clear bet text
+        //     $("#play").removeAttr('disabled');
+        //     $("#end").attr('disabled', true);
+        //     $("#bet").text('Bet').removeAttr('disabled');
+        //     $(".bet_text").text('-');
+        // });
+
+        // socket.on("update_balances", (userBalances) => {
+        //     console.log("Updated balances", userBalances);
+        //     userBalance = userBalances.balance
+        //     $(".user_balance").text(userBalances['balance']);
+        // });
+
+        socket.on("update_game_timer", (gameTimer) => {
+            console.log(gameTimer)
+            $(".game_timer").text(gameTimer.toFixed(2));
+        });
+
+        let roundId = false;
+        let isBet = '';
+        let isCashOut = false;
+        // // let user = $("#user").val();
+        // let balance = 500;
+        let intervalId = '';
+        let multiplyer = 0.1
+        // let gameIntervalId = '';
+        // let gameTimer = 0.1
+
+        socket.on('round_started', (data) => {
+            console.log("got here", data)
+            roundId = data?.roundId
+            // userBalance = data.balance
+            // $(".user_balance").text(data.balance);
+            $("#play").attr('disabled', 'true');
+            $("#end").removeAttr('disabled');
+            $("#bet").removeAttr('disabled');
+
+            if (isBet == 'future') {
+                $("#bet").removeAttr("disabled").text("CashOut");
+                $("#cancel").attr('disabled', true)
+                isBet = 'current';
+
+                socket.emit('update_multiplier');
+
+                intervalId = setInterval(() => {
+                    multiplyer += 0.1
+                    $(".timer").text(multiplyer.toFixed(2))
+                }, 500)
+            }
+            $("#cancel").attr('disabled', true);
+
+
+            // gameIntervalId = setInterval(() => {
+            //     gameTimer += 0.1
+            //     $(".game_timer").text(gameTimer.toFixed(2))
+            // }, 500)
+
+           const myTimeout =  setTimeout(()=>{
+                socket.emit('round_end')
+                console.log("end called");
+                clearTimeout(myTimeout);
+            },2000)
+
+
+        })
+
+        socket.on('round_ended', (data) => {
+            roundId = false;
+            if (isBet == 'current') {
+                isBet = '';
+            }
+            isCashOut = false;
+
+            multiplyer = 0.1;
+            gameTimer = 0.1;
+            $("#play").removeAttr('disabled');
+            $("#betAmount").removeAttr('disabled');
+            $("#end").attr('disabled', true);
+            $("#bet").text('Bet')
+            clearInterval(intervalId)
+            $(".timer").text('');
+            // clearInterval(gameIntervalId)
+
+          const timeout =   setTimeout(()=>{
+                roundStart();
+                console.log('hereee')
+                clearTimeout(timeout)
+            },500)
+
+        })
+
+        socket.on('bet', () => {
+            $("#cancel").attr('disabled', false);
+        })
+
+        socket.on('cash_out', (data) => {
+            console.log('back here')
+            isCashOut = true;
+            isBet = '';
+            $("#bet").removeAttr('disabled').text('Bet');
+            $("#betAmount").removeAttr('disabled');
+            // balance = data.balance;
+            // $(".user_balance").text(balance)
+        })
+
+        function roundStart() {
+            const betAmount = $("#betAmount").val()
+            const gameData = {
+                gameId: gameId,
+                betAmount: betAmount,
+                currency: currency,
+                user: user,
+                // balance: userBalance
+            }
+            socket.emit("round_start", gameData)
+        }
+        function roundEnd() {           
+            socket.emit("round_end")
+        }
+        function bet() {
+
+            const betAmount = $("#betAmount").val()
+            if(betAmount == ''){
+                alert('enter bet amount');
+                return false;
+            }
+            const gameData = {
+                gameId: gameId,
+                betAmount: betAmount,
+                currency: currency,
+                user: user,
+                // balance: userBalance
+            }
+            console.log(isBet)
+
+            if (isBet == '') {
+
+                $("#bet").attr('disabled', true);
+                $(".bet_text").text(betAmount);
+                $("#betAmount").attr('disabled', true)
+                socket.emit('bet', gameData)
+                isBet = 'future';
+
+            } else if (isBet == 'current' && Boolean(roundId) == true) {
+                cashout()
+            }
+        }
+        function cashout() {
+            clearInterval(intervalId)
+            $(".timer").text('');
+
+            const betAmount = $("#betAmount").val()
+            let co = multiplyer.toFixed(2)
+            const gameData = {
+                gameId: gameId,
+                betAmount: betAmount,
+                currency: currency,
+                user: user,
+                // balance: userBalance,
+                cashout: co
+            }
+            socket.emit('cash_out', gameData)
+        }
+
+        function cancel() {
+            isBet = '';
+            $("#cancel").attr('disabled', true);
+            $("#betAmount").removeAttr('disabled')
+            $("#bet").removeAttr('disabled')
+            $(".bet_text").text('-');
+            const betAmount = $("#betAmount").val();
+            const gameData = {
+                gameId: gameId,
+                betAmount: betAmount,
+                currency: currency,
+                user: user,
+                // balance: userBalance
+            }
+            socket.emit('cancel_bet', gameData)
+        }
+
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <!-- <h2>Userid : </h2>
+    <h1 id="userId">test123</h1>
+    <h2>Balance : </h2>
+    <h1 id="balance">500</h1>
+    <h2>Currency : </h2>
+    <h1 id="currency">IND</h1>
+    <input type="number" id="bet">
+
+    <button onclick="play()">Play</button> -->
+
+    <div class="container mx-4 my-4">
+        <div class="row">
+            <div class="col-sm">
+                <h4>Userid : </h4>
+                <h5 id="userId">test123</h5>
+            </div>
+            <div class="col-sm">
+                <h4>Balance : </h4>
+                <h5 id="balance">500</h5>
+            </div>
+            <div class="col-sm">
+                <h4>Currency : </h4>
+                <h5 id="currency">IND</h5>
+            </div>
+            <div class="col-sm">
+                <h4>Bet : </h4>
+                <h5 id="bet_text"></h5>
+            </div>
+        </div>
+        <div class="row">
+            <!-- <dv class="col-sm"></dv> -->
+            <div class="col-sm mt-4">
+                <input type="number" id="bet" min="1" placeholder="Enter bet amount">
+                <button onclick="play()" id="playBtn">Play</button>
+            </div>
+            <!-- <dv class="col-sm"></dv> -->
+        </div>
+    </div>
+
+    <script>
+
+        const socket = io("http://localhost:3000")
+
+        socket.on("connect")
+
+        let playToken = '';
+
+        socket.on("game_play", (data) => {
+            document.getElementById("bet").value = ""
+            document.getElementById("balance").innerHTML = data?.balance
+            document.getElementById("currency").innerHTML = data?.currency
+
+            playToken = data?.playToken
+
+            setTimeout(() => {
+                end();
+            }, 1000)
+
+        })
+
+        socket.on("game_end", (data) => {
+
+            document.getElementById("balance").innerHTML = data?.balance
+            document.getElementById("currency").innerHTML = data?.currency
+            document.getElementById("bet_text").innerHTML = ""
+            document.getElementById("playBtn").innerText = "Play";
+
+
+            if (data?.isWin == true) {
+                alert("You WON the game, you got " + data?.winAmount + " " + data?.currency);
+            } else {
+                alert("You LOSS the game");
+            }
+            document.getElementById("playBtn").ariaDisabled = false;
+
+        })
+
+        let counter = 1;
+        let betAmount = 0;
+
+        function play() {
+
+            document.getElementById("playBtn").innerText = "Playing";
+            document.getElementById("playBtn").ariaDisabled = true;
+
+            let user = document.getElementById("userId").innerHTML
+            let balance = document.getElementById("balance").innerHTML
+            let currency = document.getElementById("currency").innerHTML
+            betAmount = document.getElementById("bet").value
+            document.getElementById("bet_text").innerHTML = betAmount
+
+            const gameData = {
+                playToken: playToken,
+                gameId: "game1",
+                user: user,
+                balance: Number(balance),
+                currency: currency,
+                betAmount: Number(betAmount),
+                status: "Play"
+            }
+
+            socket.emit("game_play", gameData)
+        }
+
+        function end() {
+            counter++;
+            document.getElementById("playBtn").innerText = "Playing";
+
+            let user = document.getElementById("userId").innerHTML
+            let balance = document.getElementById("balance").innerHTML
+            let currency = document.getElementById("currency").innerHTML
+
+            const gameData = {
+                playToken: playToken,
+                gameId: "game1",
+                user: user,
+                balance: Number(balance),
+                currency: currency,
+                betAmount: Number(0),
+                status: "End",
+                isWin: (counter % 2) == 0 ? true : false,
+                winAmount: (counter % 2) == 0 ? (Number(betAmount)) : 0
+            }
+
+            socket.emit("game_end", gameData)
+        }
+
+    </script>
+
+</body>
+
+</html>
