@@ -13,33 +13,99 @@ app.set("view engine", "ejs")
 
 
 app.get('/aviator-socket', (req, res) => {
-  res.render('aviator3'); // it will find home file from views folder as we are using ejs
+  res.render('aviator4'); // it will find home file from views folder as we are using ejs
 });
 
 
 // -------------------------------------------------- socket -------------------------------------------------
 
-let currentRoundId = null; // Track current round ID
-let gameTimer = 0.1; // Initialize game timer
-let gameIntervalId = null; // Interval ID for game timer
 
-// Shared state for user balances (example, you might use a database for production)
+let currentRoundId = null;
+let futureRoundId = randomUUID();
+let isCurrentRoundPlaying = true;
+const gameId = '6666f1bd704df0066adfc878';
+let endTime;
+let startTime;
+
 const users = {};
+
+function roundStart() {
+
+  console.log('started function')
+  let data = {};
+  currentRoundId = futureRoundId;
+  futureRoundId = randomUUID();
+  data.roundId = currentRoundId;
+  data.futureRoundId = futureRoundId;
+  data.gameId = gameId
+  data.startTime = new Date();
+  BetController.createRound(data);
+  data.round = true;
+
+  startTime = Date.parse(data.startTime)
+  endTime = Date.parse(data.startTime) + 60000;
+
+  isCurrentRoundPlaying = true;
+
+  io.to(currentRoundId).emit("round_started", { roundId: data.round, startTime, endTime });
+
+  const myTimeout = setTimeout(() => {
+    roundEnd();
+    clearTimeout(myTimeout)
+  }, 60000)
+}
+
+function roundEnd() {
+
+  console.log('ended function')
+
+  if (!currentRoundId) {
+    // No round in progress, handle accordingly
+    return;
+  }
+  isCurrentRoundPlaying = false;
+  endTime = 0;
+  const gameData = { roundId: currentRoundId, result: 0, gameId: gameId };
+  BetController.endRound(gameData);
+  
+  io.to(currentRoundId).emit("round_ended");
+
+  //move all connected user to future round room
+  const clients = io.sockets.adapter.rooms.get(currentRoundId);
+  if (clients) {
+      for (const clientId of clients) {
+          const socket = io.sockets.sockets.get(clientId);
+          if (socket) {
+              socket.leave(currentRoundId);
+              socket.join(futureRoundId);
+          }
+      }
+  }  
+  currentRoundId = null;
+  const myTimeout = setTimeout(() => {
+    roundStart();
+    clearTimeout(myTimeout)
+  }, 1000)
+
+}
 
 // Socket.IO event handlers
 io.on("connect", (socket) => {
   console.log("User connected: " + socket.id);
   const user = Math.floor(Math.random() * (100000 - 10000 + 1)) + 10000;
 
-  ///send win amount in cashout and final balance to connected useer ,,, and send lose amount and final balance in end of all users
+  if (Object.keys(users).length == 0) {
+    console.log('first emit');
+    socket.emit('first');
+  }
 
-  // if (Object.keys(users).length == 0) {
-  //   console.log('firs emit');
-  //   socket.emit('first');
-  // }
+  if (isCurrentRoundPlaying) {
+    socket.join(futureRoundId);
+  } else if (!isCurrentRoundPlaying) {
+    socket.join(currentRoundId);
+  }
 
-  socket.on('user_connected', ({  userBalance }) => {
-    // Store user in the object
+  socket.on('user_connected', ({ userBalance }) => {
     users[socket.id] = {
       user
     };
@@ -48,85 +114,60 @@ io.on("connect", (socket) => {
     socket.emit('initial_state', {
       user: user,
       balance: userBalance,
-      roundId: currentRoundId,
-      gameTimer,
+      roundId: true,
+      startTime,
+      endTime
     });
   });
 
-  socket.on("round_start", async (data) => {
+  socket.on("first", async () => {
     if (currentRoundId) {
       // Already a round in progress, handle accordingly
       return;
     }
-    currentRoundId = randomUUID();
-    data.roundId = currentRoundId;
-    BetController.createRound(data);
-    data.roundId = true;
-
-    io.emit("round_started", { roundId: currentRoundId });
-    startListeningToUpdateGameTimer();
-
-    gameIntervalId = setInterval(() => {
-      gameTimer += 0.1;
-      io.emit("update_game_timer", gameTimer);
-    }, 100);
-
+    roundStart();
   });
 
-  function startListeningToUpdateGameTimer() {
-    socket.on('update_game_timer', () => { });
-  }
-
-  socket.on("round_end", async (data) => {
-    if (!currentRoundId) {
-      // No round in progress, handle accordingly
-      return;
-    }
-
-    const gameData = { roundId: currentRoundId, result: gameTimer, gameId: data.gameId };
-    BetController.endRound(gameData);
-    currentRoundId = null;
-
-    io.emit("round_ended");
-    clearInterval(gameIntervalId);
-    gameTimer = 0.1;
-    // io.emit("update_balances", users);
-
-  });
-
-  socket.on("bet", async (data) => {
-    data.status = 'Pending';
+  socket.on("bet", async (data, callback) => {
+    data.status = 0;
+    data.gameId = gameId
     BetController.createRoundBet(data);
-    socket.emit("bet", data);
+    callback(data);
   });
 
-  socket.on("cancel_bet", async (data) => {
+  socket.on("cancel_bet", async (data, callback) => {
+    data.gameId = gameId
     data.roundId = currentRoundId;
     data.balance = users[socket.id]['balance']
     BetController.cancelBet(data);
-    socket.emit("cancel_bet", data);
-
+    callback(data);
   });
 
-  socket.on("cash_out", async (data) => {
+  socket.on("cash_out", async (data, callback) => {
     data.roundId = currentRoundId;
-    data.status = 'End';
-    const bet = await BetController.cashout(data);
-    if (bet) {
-      users[socket.id]['balance'] = bet.balance;
-      data.balance = bet.balance
+    data.gameId = gameId
+    data.status = 2;
+    const response = await BetController.cashout(data);
+    if (response) {
+      users[socket.id]['balance'] = response.balance;
+      data.balance = response.balance
     }
-    socket.emit("cash_out", data);
-    socket.off('update_game_timer', () => { });
+    callback(data);
+
+    if (response.endGame && response.endGame == true) {
+      roundEnd();
+    }
 
   });
 
 
-  // Handle disconnect
+  socket.on("error", (error) => {
+    console.error("Socket error:", error);
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected: ' + socket.id);
     delete users[socket.id];
-    // Clean up if necessary
   });
 });
 

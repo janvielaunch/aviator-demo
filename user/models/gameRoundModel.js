@@ -4,7 +4,7 @@ const gameRoundSchema = new mongoose.Schema({
     roundId: {
         type: String,
         required: true,
-        unique: true, 
+        unique: true,
     },
     gameId: {
         type: String,
@@ -18,32 +18,36 @@ const gameRoundSchema = new mongoose.Schema({
     endTime: {
         type: Date,
         required: false,
-        default : null
+        default: null
     },
     result: {
         type: Number,
         required: false,
-        default : null
+        default: null
     },
     totalUsers: {
         type: Number,
         required: false,
-        default : null
+        default: null
+    },
+    totalCashoutUsers: {
+        type: Number,
+        required: false,
+        default: null
     },
     totalBet: {
         type: Number,
         required: false,
-        default : null
+        default: null
     },
     totalCashOut: {
         type: Number,
         required: false,
-        default : null
+        default: null
     },
     status: {
-        type: String,
-        enum: ['Start', 'End'],
-        default : "Start",
+        type: Number,
+        // default: 0,  //[0='Pending',1='Start',2='End']       
         required: true,
     },
 })

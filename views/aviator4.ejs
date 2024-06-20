@@ -63,17 +63,16 @@
 
         const socket = io("http://localhost:3000")
 
-        const gameId = '6666f1bd704df0066adfc878';
         let currency = "INR";
         let roundId = false;
         let isBet = '';
         let isCashOut = false;
         let intervalId = '';
         let gameIntervalId = '';
-        let multiplyer = 0.1
+        let multiplyer = 0
         let gameTimer = 0
         let betAmount = 0;
-        const timeOut = 2000; // set time for game end , game will end after 2000 ms.
+        let result = 0; // set time for game end , game will end after 2000 ms.
 
         const user = Math.floor(Math.random() * (100000 - 10000 + 1)) + 10000;
         let userBalance = 500;
@@ -84,94 +83,61 @@
             socket.emit('user_connected', { userBalance });
         });
 
-        // socket.on('first', () => {
-        //     const gameData = {
-        //             gameId: gameId,
-        //             betAmount: betAmount,
-        //         currency: currency,
-        //         user: user,
-        //     }
-        //     socket.emit("round_start", gameData)
-        // });
+        socket.on('first', () => {
+            socket.emit("first")
+        });
 
         socket.on("initial_state", (data) => {
             $("#user_balance").text(data.balance);
             document.getElementById('userId').textContent = data.user;
-            if (data.gameTimer != 0) {
-                gameTimer = data.gameTimer
-                console.log('intital', gameTimer)
-                gameIntervalId = setInterval(updateTimer, 100);
-                roundStarted(data);
-            }
+            console.log('initiated', data);
+
+            // if (data.endTime != 0) {
+            //     roundStarted(data);
+            // }
         });
-
-        socket.on("update_game_timer", (gameTimerData) => {
-            console.log({ gameTimerData })
-            gameTimer = gameTimerData;
-            // gameTimer = Date.now()
-            gameIntervalId = setInterval(updateTimer, 100);
-        });
-
-        function updateTimer() {
-            // console.log(gameTimer)
-            // Calculate the elapsed time since gameTimer
-            let currentTime = Date.now();
-            // let elapsedTime = currentTime - gameTimer;
-            let elapsedTime = (currentTime - gameTimer) / 1000;
-
-            // Format the elapsed time and display it
-            $(".game_timer").text(formatTime(elapsedTime));
-
-        }
-
-
-        function formatTime(milliseconds) {
-            // Convert milliseconds to seconds and format to 2 decimal places
-            // let seconds = (milliseconds / 1000).toFixed(2);
-            return milliseconds.toFixed(1);
-        }
-
 
         socket.on('round_started', (data) => {
+            console.log('started', data);
             roundStarted(data);
         })
-        
-        function roundStarted(data){
+
+        function roundStarted(data) {
             roundId = data?.roundId
+            clearInterval(gameIntervalId);
+            gameTimer = 0;
+            gameIntervalId = setInterval(() => { updateTimer(data.startTime, data.endTime) }, 100);
+
             $("#play").attr('disabled', 'true');
             $("#end").removeAttr('disabled');
             $("#bet").removeAttr('disabled');
-    
+
             if (isBet == 'future') {
                 $("#bet").removeAttr("disabled").text("CashOut");
                 $("#cancel").attr('disabled', true)
-    
+
                 const betAmount = $("#betAmount").val()
                 userBalance -= betAmount
                 $("#user_balance").text(userBalance)
                 isBet = 'current';
-    
-                socket.emit('update_multiplier');
-    
+
                 intervalId = setInterval(() => {
                     multiplyer += (0.1 * betAmount)
                     $(".timer").text(multiplyer.toFixed(2))
                 }, 100)
             }
             $("#cancel").attr('disabled', true);
-    
-            // const myTimeout = setTimeout(() => {
-            //     roundEnd();
-            //     clearTimeout(myTimeout);
-            // }, timeOut)
 
         }
 
         socket.on('round_ended', (data) => {
-            console.log('ended',Date.now())
+            console.log('ended', Date.now())
+
             roundId = false;
             clearInterval(intervalId)
             clearInterval(gameIntervalId)
+            gameTimer = 0;
+
             if (isBet == 'current') {
                 isBet = '';
                 $(".bet_text").text(' ');
@@ -179,62 +145,19 @@
             }
             isCashOut = false;
 
-            multiplyer = 0.1;
-            gameTimer = 0.1;
+            multiplyer = 0;
+            gameTimer = 0;
             $("#play").removeAttr('disabled');
             $("#betAmount").removeAttr('disabled');
             $("#end").attr('disabled', true);
             $("#bet").text('Bet')
             $(".timer").text('');
 
-            // const timeout = setTimeout(() => { 
-            //     roundStart();
-            //     clearTimeout(timeout)
-            // }, 500)
-
         })
-
-        socket.on('bet', () => {
-            $("#cancel").attr('disabled', false);
-        })
-
-        socket.on('cash_out', (data) => {
-            isCashOut = true;
-            isBet = '';
-            betAmount = '';
-            multiplyer = 0.1;
-            $(".bet_text").text('');
-            $("#bet").removeAttr('disabled').text('Bet');
-            $("#betAmount").removeAttr('disabled');
-            userBalance = data.balance ? data.balance : userBalance;
-            $("#user_balance").text(userBalance)
-            socket.off('update_game_timer');            
-        })
-
-        function roundStart() {
-            const gameData = {
-                gameId: gameId,
-                betAmount: betAmount,
-                currency: currency,
-                user: user,
-                balance: userBalance
-            }
-            console.log('start')
-            socket.emit("round_start", gameData)
-        }
-
-        function roundEnd() {
-            // $(".timer").text('');
-            console.log('end')
-
-            const gameData = {
-                gameId: gameId,
-            }
-            socket.emit("round_end", gameData)
-        }
 
         function bet() {
             console.log('bet')
+            console.log({roundId})  
 
             betAmount = $("#betAmount").val()
             if (betAmount == '') {
@@ -242,7 +165,6 @@
                 return false;
             }
             const gameData = {
-                gameId: gameId,
                 betAmount: betAmount,
                 currency: currency,
                 user: user,
@@ -254,7 +176,9 @@
                 $("#bet").attr('disabled', true);
                 $(".bet_text").text(betAmount);
                 $("#betAmount").attr('disabled', true)
-                socket.emit('bet', gameData)
+                socket.emit('bet', gameData, () => {
+                    $("#cancel").attr('disabled', false);
+                })
                 isBet = 'future';
 
             } else if (isBet == 'current' && Boolean(roundId) == true) {
@@ -268,14 +192,25 @@
 
             let co = multiplyer.toFixed(2)
             const gameData = {
-                gameId: gameId,
                 betAmount: betAmount,
                 currency: currency,
                 user: user,
                 balance: userBalance,
                 cashout: co
             }
-            socket.emit('cash_out', gameData)
+
+            socket.emit('cash_out', gameData, (data) => {
+                isCashOut = true;
+                isBet = '';
+                betAmount = '';
+                multiplyer = 0;
+                $(".bet_text").text('');
+                $("#bet").removeAttr('disabled').text('Bet');
+                $("#betAmount").removeAttr('disabled');
+                userBalance = data.balance ? data.balance : userBalance;
+                $("#user_balance").text(userBalance)
+
+            })
         }
 
         function cancel() {
@@ -286,15 +221,30 @@
             $(".bet_text").text(' ');
 
             const gameData = {
-                gameId: gameId,
                 betAmount: betAmount,
                 currency: currency,
-                user: user,
-                // balance: userBalance
+                user: user
             }
             socket.emit('cancel_bet', gameData)
         }
 
+        function updateTimer(startTime, endTime) {
+            let currentTime = Date.now();
+            if (endTime <= currentTime) {
+                console.log(endTime, currentTime)
+                gameTimer = (currentTime - startTime) / 1000;
+                $(".game_timer").text(formatTime(gameTimer));
+                gameTimer = 0;
+                clearInterval(gameIntervalId);
+                return true;
+            }
+            gameTimer = (currentTime - startTime) / 1000;
+            $(".game_timer").text(formatTime(gameTimer));
+        }
+
+        function formatTime(milliseconds) {
+            return milliseconds.toFixed(2);
+        }
 
     </script>
 </body>

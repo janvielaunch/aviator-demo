@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const { type } = require("os");
 
 const newBetSchema = new mongoose.Schema({
     gameId: {
@@ -48,8 +47,8 @@ const newBetSchema = new mongoose.Schema({
         required: false,
     },
     status: {
-        type: String,
-        enum: ['Pending', 'Playing', 'End', 'Cancelled'],
+        type: Number, //[0='Pending',1='Playing',2='End',3='Cancelled'],
+        default : 0,
         required: true,
     },
     betTime: {
